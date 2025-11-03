@@ -19,7 +19,7 @@ jobs:
           echo "GITHUB_WORKSPACE = $GITHUB_WORKSPACE"
           echo "Top-level listing:"
           ls -la "$GITHUB_WORKSPACE" || true
-          echo "Listing contents of any subfolders:"
+          echo "Listing contents of each subfolder:"
           for d in "$GITHUB_WORKSPACE"/*; do
             [ -d "$d" ] && echo "---- $d ----" && ls -la "$d"
           done
@@ -29,18 +29,14 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Run tests (use nested folder if present)
+      - name: Run tests (auto-detect project folder)
         run: |
-          # определим путь, где лежит проект (по умолчанию корень)
           PROJ_DIR="$GITHUB_WORKSPACE"
           if [ -d "$GITHUB_WORKSPACE/u-money-calculator" ] && [ -f "$GITHUB_WORKSPACE/u-money-calculator/requirements.txt" ]; then
-            echo "Detected nested project folder: u-money-calculator"
             PROJ_DIR="$GITHUB_WORKSPACE/u-money-calculator"
           else
-            # попытка найти первую папку, где есть app и tests
             for d in "$GITHUB_WORKSPACE"/*; do
               if [ -d "$d/app" ] && [ -d "$d/tests" ]; then
-                echo "Detected project folder: $d"
                 PROJ_DIR="$d"
                 break
               fi
@@ -54,8 +50,8 @@ jobs:
           pip install -r requirements.txt || true
           pip install pytest flake8
 
-          echo "Running flake8 (warnings won't fail the job)"
+          echo "Run flake8 (warnings won't fail the job)"
           flake8 . || true
 
-          echo "Running pytest with PYTHONPATH=$PROJ_DIR"
+          echo "Run pytest with PYTHONPATH=$PROJ_DIR"
           PYTHONPATH="$PROJ_DIR" pytest -q
