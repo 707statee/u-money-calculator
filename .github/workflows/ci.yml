@@ -2,11 +2,9 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   build:
@@ -16,34 +14,48 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
+      - name: Show workspace layout (debug)
+        run: |
+          echo "GITHUB_WORKSPACE = $GITHUB_WORKSPACE"
+          echo "Top-level listing:"
+          ls -la "$GITHUB_WORKSPACE" || true
+          echo "Listing contents of any subfolders:"
+          for d in "$GITHUB_WORKSPACE"/*; do
+            [ -d "$d" ] && echo "---- $d ----" && ls -la "$d"
+          done
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: Run tests (use nested folder if present)
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          # определим путь, где лежит проект (по умолчанию корень)
+          PROJ_DIR="$GITHUB_WORKSPACE"
+          if [ -d "$GITHUB_WORKSPACE/u-money-calculator" ] && [ -f "$GITHUB_WORKSPACE/u-money-calculator/requirements.txt" ]; then
+            echo "Detected nested project folder: u-money-calculator"
+            PROJ_DIR="$GITHUB_WORKSPACE/u-money-calculator"
+          else
+            # попытка найти первую папку, где есть app и tests
+            for d in "$GITHUB_WORKSPACE"/*; do
+              if [ -d "$d/app" ] && [ -d "$d/tests" ]; then
+                echo "Detected project folder: $d"
+                PROJ_DIR="$d"
+                break
+              fi
+            done
+          fi
 
-      - name: Lint with flake8
-        run: |
-          pip install flake8
+          echo "Using project dir: $PROJ_DIR"
+          cd "$PROJ_DIR"
+
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt || true
+          pip install pytest flake8
+
+          echo "Running flake8 (warnings won't fail the job)"
           flake8 . || true
 
-      - name: Run tests with pytest (handle nested repo folder)
-        run: |
-          pip install pytest
-          echo "Workspace: $GITHUB_WORKSPACE"
-          echo "Listing workspace root:"
-          ls -la "$GITHUB_WORKSPACE" || true
-          # если проект оказался вложенным (например: u-money-calculator/u-money-calculator),
-          # добавим вложенную папку в PYTHONPATH
-          if [ -d "$GITHUB_WORKSPACE/u-money-calculator" ]; then
-            echo "Detected nested folder: $GITHUB_WORKSPACE/u-money-calculator"
-            export PYTHONPATH="$GITHUB_WORKSPACE/u-money-calculator:$GITHUB_WORKSPACE"
-          else
-            export PYTHONPATH="$GITHUB_WORKSPACE"
-          fi
-          echo "PYTHONPATH=$PYTHONPATH"
-          PYTHONPATH=$PYTHONPATH pytest -q
+          echo "Running pytest with PYTHONPATH=$PROJ_DIR"
+          PYTHONPATH="$PROJ_DIR" pytest -q
